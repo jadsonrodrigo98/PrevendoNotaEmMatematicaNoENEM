@@ -1,0 +1,347 @@
+---
+title: "Projeto Nota em Matemática no ENEM no estado de Roraima"
+author: "Jadson Rodrigo"
+date: "20/06/2021"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE,warning=FALSE,message=FALSE)
+```
+
+```{r}
+library(fastDummies)
+library(readr)
+library(tidyverse)
+library(corrplot)
+library(bestglm)
+library(leaps)
+```
+
+**Introdução**
+
+A análise de regressão é uma técnica utilizada para quantificar uma relação entre uma variável resposta e um conjunto de uma ou mais variáveis explicativas,sendo muito utilizada para ajustamento de curvas . Neste projeto,o foco será em estimar a nota em Matemática no Enem no estado de Roraima,de acordo com variáveis como Nota em Ciências Humanas,Sexo,Idade,Cor,etc .
+
+**Descrição do Banco de dados**
+
+Primeiramente,pode-se conhecer as variáveis do banco de dados "dados_218405 (1).csv" através das 6 primeiras linha do conjunto de dados .
+
+```{r}
+colsenem=cols_only(UF="c",Idade="d",Sexo="c",Cor="c",EstadoCivil="c",NotaCN="c",NotaCH="c",NotaLC="c",NotaMT="c",NotaRED="d",InstrPai="c",InstrMae="c",NPessoas="d",Renda="c",EscolaEM="c",TurnoEM="c")
+dadosenem<-read_csv2("C:/Users/j2184/Downloads/dados_218405 (1).csv",col_types=colsenem)
+head(dadosenem)
+```
+```{r}
+dadosenem<-dadosenem%>%mutate(Cor=ifelse(Cor=="PPI",Cor,"NÃO PPI"),NotaCN=as.numeric(NotaCN),NotaCH=as.numeric(NotaCH),NotaLC=as.numeric(NotaLC),NotaMT=as.numeric(NotaMT))
+```
+
+
+
+Pode-se então dá um breve descritivo das variáveis do conjunto de dados : 
+
+**UF**=Estado de residência do aplicante,todas RR
+
+**Idade**=Variável discreta relacionada a idade do aplicante
+
+**Sexo**=Variável qualitativa relacionada ao sexo do aplicante,nos níveis Masculino e Feminino
+
+**Cor** =Variável qualitativarelacionada a cor do aplicantes,nos níveis PPI e não PPI)
+
+**EstadoCivil** = Variável qualitativa com os níveis Solteiro ou outro 
+
+**NotaCN**=Nota em Ciências da natureza
+
+**NotaCH** = Nota em Ciências humanas
+
+**NotaLC** = Nota em linguagens e códigos
+
+**NotaMT** Nota em Matemática 
+
+**NotaRED**= Nota em redação 
+
+**InstrPai**=Nível de instrução do pai,nos níveis Fundamental,Médio ou Superior
+
+**InstrMae**=Nível de instrução da mãe,nos níveis Fundamental,Médio ou Superior)
+
+**NPessoas**=Número de pessoas que moram na casa do aplicante 
+
+**Renda**=Renda total da familia do aplicante,nos níveis 1. Ate 1 SM, 2. 1 a 3 SM ,3. 3 a 5
+SM,4. 5 a 10 SM,5. 10 ou mais,onde SM=Salario minimo)
+
+**EscolaEM**=Tipo de escola que o estudante estudou,nos níveis Publica/Privada,Somente Privada,Somente Publica
+
+**TurnoEM**=Turno ensino médio,nos níveis Parte diurno/Parte noturno,somente diurno,somente noturno)
+
+Após conhecer as variáveis é possivel conhecer as medidas sumárias das variáveis do banco de dados .
+
+**Análise descritiva das variáveis do conjunto de dados**
+
+Após a descrição das variáveis , é possível estuda-las de uma forma mais profunda . Primeiramente , analisando as variáveis quantitativas . 
+
+```{r}
+variaveisquantitativas<-dadosenem%>%select(Idade,NotaMT,NotaLC,NotaCN,NotaRED,NotaCH,NPessoas)
+summary(variaveisquantitativas)
+```
+Ao se observar a tabela 1,pode-se verificar que a área que os aplicantes de Roraima vão melhor é Ciências humanas,com média 544.9 . E além disso,a área que os aplicantes vão
+pior é na variável resposta de estudo,Matemática,com média 438.3 . Por fim,pode-se verificar se existe outliers para as variáveis quantitativas por meio de boxplot,primeiramente construindo boxplot para as variáveis relacionadas a notas  . 
+
+
+```{r}
+boxplot(variaveisquantitativas$NotaMT,variaveisquantitativas$  NotaLC,variaveisquantitativas$NotaCN,variaveisquantitativas$NotaRED,variaveisquantitativas$NotaCH,col=c("gray","red","blue","green","yellow","purple"),names=c("MT","LC","CN","RED","CH"),main="Boxplot das notas nas matériras do ENEM")
+```
+É possível construir agora boxplot para as variáveis relacionada a número de pessoas que moram na casa do aplicante,e também de idade .
+
+```{r}
+par(mfrow=c(1,2), mar=c(3,3,2,3))
+boxplot(variaveisquantitativas$Idade,main="Boxplot da variável idade")
+boxplot(variaveisquantitativas$NPessoas,main="Boxplot da variável NPessoas")
+```
+
+Uma possível análise que pode ser feita em relação aos boxplots é que é possível observar algumas presenças de outliers nas variáveis ,principalmente na variável NotaMT e NotaRED,porém a decisão aqui é não retirá-las,pois segundo a coluna de máximos e mínimos da Tabela 1 não há valores que fogem a regra do ENEM,isto é,as notas estão no intervalo 0-1000,e também um aplicante de 15 a 66 anos podem realizar
+ENEM,e é "possível" morar 16 pessoas em um casa . E retirar esses valores poderiam comprometer a predição de novas observações com esses valores . 
+
+Por fim,pode-se verificar como a variável NotaMT ,Nota em Matemática se relaciona com as outras variáveis quantitativas do conjunto de dados ,através de uma matriz de correlação .Onde uma relação de duas variáveis próxima de 1 entre duas variáveis indica uma alta relação,ou seja ,quando uma aumenta a outra também aumenta . Enquanto que um coeficiente de correlação de -1 indica o oposto,ou seja ,se uma aumenta a outra diminui .  Além disso, uma correlação entre duas variáveis pode ocasionar o problema de multicolinearidade .
+
+```{r}
+correlacao<-cor(variaveisquantitativas)
+corrplot(correlacao,method=c("color"),addCoef.col = TRUE,addgrid.col=TRUE,diag=TRUE)
+```
+
+
+Ao se analisar a matriz,pode-se verificar que a variável NotaCN é a que mais está correlacionada com a variável NotaMT, o que faz de certa forma sentido,pois são duas matérias de exatas,e quando uma pessoa vai bem em Matemática ela normalmente vai bem em Natureza,devido a isso NotaCN provavelmente entrará no modelo .Além disso,NotaCH,NotaLC,NotaRED,tem uma correlação considerável com a variável NotaMT,o que é um indício que elas entrarão no modelo de regressão . E as variáveis idade e NPessoas têm uma correlação quase nula com a variável NotaMT ,com grau de correlação de -0.07 . A respeito da multicolinearidade,as variáveis apresentam entre si uma correlação
+máxima de 0.65,que ocorre as variáveis NotaLC e NotaCH,o que é bom para o modelo,pois evita problemas de multicolinearidade,tais como o modelo não ser único,efeitos na soma de quadrados,etc .
+
+Por fim, pode-se realizar um estudo para as variáveis qualitativas do conjunto de dados,observando como os níveis estão distribuidos em cada uma das variáveis . 
+
+
+
+
+
+
+```{r}
+par(mfrow=c(3,2), mar=c(3,3,2,3))
+sexo<-table(dadosenem$Sexo)
+barplot(sexo,col="Blue",xlab="Sexo",ylab="Frequência",main="Frequência de acordo com o sexo")
+cor<-table(dadosenem$Cor)
+barplot(cor,col="Blue",ylab="Frequência",main="Frequência de acordo com a cor")
+estadocivil<-table(dadosenem$EstadoCivil)
+barplot(estadocivil,col="Blue",xlab="Sexo",ylab="Frequência",main="Frequência de acordo com o estado civil")
+instpai<-table(dadosenem$InstrPai)
+barplot(instpai,col="Blue",xlab="Sexo",ylab="Frequência",main="Frequência de acordo com a instrução do pai")
+instmae<-table(dadosenem$InstrMae)
+barplot(instmae,col="Blue",xlab="Sexo",ylab="Frequência",main="Frequência de acordo com a instrução da mãe")
+renda<-table(dadosenem$Renda)
+barplot(renda,col="Blue",xlab="Sexo",ylab="Frequência",main="Frequência de acordo com a renda")
+
+
+```
+
+
+```{r}
+escolaenem<-table(dadosenem$EscolaEM)
+barplot(escolaenem,col="Blue",xlab="Tipo de escola",ylab="Frequência",main="Frequência de acordo com a renda")
+turnoem<-table(dadosenem$TurnoEM)
+barplot(turnoem,col="Blue",xlab="Turno da escola ",ylab="Frequência",main="Frequência de acordo com o turno")
+```
+
+
+Dos gráficos , é possivel retirar alguns insights . A maioria dos aplicantes são de escola pública,e o período em que há mais estudantes é somente diurno ,a maior parte dos aplicantes são solteiro . Outra análise a ser feita é referente a educação ao nível de instrução dos país e das mãe , onde há a predominância do nível Fundamental,principalmente no que se refere aos pais . 
+
+**Modelagem**
+
+Para a construção dos modelos para predidizir a nota em Matemática tem-se que criar variáveis dummys para as variáveis qualitativas ,e definir um nível de referência para elas . O nível de refência para a variável sexo é "Masculino",para a cor é "NãoPPI",para o estado cívil é "Outro",para instrução mãe e pai o nível de referência é "Fundamental" ,para a renda é "1. Ate 1 SM",para o tipo de escola é "Publica/Privada",e para a variável referente ao turno é "Parte diurno/Parte noturno" . 
+
+Há seis métodos para selecionar variáveis para ajustar um  modelo  de Regressão ,que são AIC,PRESSp, BIC,Cp de mallow,R2 ajustado . Então,pode-se selecionar o modelo para cada critério,e verificar qual modelo se ajusta melhor utilizando o critério do MSPR,onde quando um modelo apresenta MSPR menor dos outros, é um indicio de que aquele modelo é me número menor do que os demais . 
+
+```{r}
+dadosenem<-dummy_cols(dadosenem,select_columns=c("InstrPai","InstrMae","Renda","EscolaEM","TurnoEM"))
+```
+
+
+```{r}
+names(dadosenem)<-c("UF","Idade","Sexo","Cor","EstadoCivil","NotaCN","NotaCH","NotaLC","NotaMT","NotaRED","InstrPai","InstrMae","NPessoas","Renda","EscolaEM","TurnoEM","InstrPai_Fundamental","InstrPai_Medio","InstrPai_Superior","InstrMae_Fundamental","InstrMae_Medio","InstrMae_Superior","Renda_1.Ate1SM","Renda_2.1a3SM","Renda_3.3a5SM","Renda_4.5a10SM","Renda_5.10oumais","EscolaEM_Publica/Privada","EscolaEM_SomentePrivada","EscolaEM_SomentePublica","TurnoEM_ParteDiurno/ParteNoturno","TurnoEM_Somentediurno","TurnoEM_Somentenoturno")
+```
+
+```{r}
+dadosenem<-dadosenem%>%select(-InstrPai,-InstrMae,-Renda,-EscolaEM,-TurnoEM,-InstrPai_Fundamental,-InstrMae_Fundamental,-Renda_1.Ate1SM)
+dadosenem$`EscolaEM_Publica/Privada`<-NULL
+```
+```{r}
+dadosenem$`TurnoEM_ParteDiurno/ParteNoturno`<-NULL
+```
+```{r}
+dadosenem<-dadosenem%>%select(-UF)
+```
+```{r}
+dadosmatematica<-dadosenem%>%select(NotaMT)
+dadosenem<-dadosenem%>%select(-NotaMT)
+dadosenem<-cbind(dadosenem,dadosmatematica)
+```
+```{r}
+dadosenem<-dadosenem%>%mutate(Sexo=ifelse(dadosenem$Sexo=="F",1,0),EstadoCivil=ifelse(dadosenem$EstadoCivil=="Solteiro",1,0),Cor=ifelse(Cor=="PPI",1,0),EstadoCivil=replace(EstadoCivil,is.na(EstadoCivil),1))
+dadostreino<-dadosenem[1:700,]
+dadosteste<-dadosenem[701:1000,]
+```
+
+
+```{r}
+xy<-dadostreino
+names(xy)<-c(names(xy)[1:21],"y")
+modelos<-bestglm(xy,IC="AIC",TopModels = 2)
+```
+```{r}
+melhor <- which(modelos$Subsets$AIC==min(modelos$Subsets$AIC))
+numvar <- dim(xy)[2]-1
+varincluidas <- modelos$Subsets[melhor,2:(numvar+1)]
+```
+
+Segundo o critério do AIC e PRESSp : 
+
+```{r}
+modelo1<- lm (NotaMT ~Idade+Cor+NotaCN+NotaCH+NotaLC+Renda_5.10oumais+EscolaEM_SomentePrivada,data=dadostreino)
+summary(modelo1)
+```
+```{r}
+modelos<-bestglm(xy,IC="BIC")
+melhor<- which(modelos$Subsets$BIC==min(modelos$Subsets$BIC))
+variaveisincluidas<-modelos$Subsets[melhor,2:(numvar+1)]
+```
+
+Segundo o critério do BIC : 
+```{r}
+modelo2<- lm (NotaMT ~
+Idade+NotaCN+NotaCH+NotaLC+Renda_5.10oumais+EscolaEM_SomentePublica,data=dadostreino)
+summary(modelo2)
+modelos<-bestglm(xy,IC="LOOCV")
+melhor<- which(modelos$Subsets$LOOCV==min(modelos$Subsets$LOOCV))
+variaveisincluidas<-modelos$Subsets[melhor,2:(numvar+1)]
+```
+
+```{r}
+modelos<-regsubsets(y~ . ,data=xy,nbest=2)
+resultados=data.frame(cbind("p"=rowSums(summary(modelos)$which),summary(modelos)$
+which,"Cp"=round(summary(modelos)$cp,2),"R2"=round(summary(modelos)$rsq,2),"R2ajus
+tado"=round(summary(modelos)$adjr2,2)))
+```
+
+Segundo o critério do Cp de mallow e R ajustado : 
+
+```{r}
+modelo3<-lm(NotaMT~Idade+Cor+NotaCN+NotaCH+NotaLC+Renda_5.10oumais+EscolaEM_SomentePublica,data=dadostreino)
+summary(modelo3)
+```
+
+Por fim,pode-se calcular o MSPR com os dados de teste,e verificar qual dos modelos apresenta o menor MSPR . 
+
+```{r}
+yobservado<-dadosteste$NotaMT
+yhatmodelo1<-predict(modelo1,newdata=dadosteste)
+mspr<-function(yhat,yobs){
+mean((yhat-yobs)^2)
+}
+msprmodelo1<-mspr(yhatmodelo1,yobservado)
+yhatmodelo2<-predict(modelo2,newdata=dadosteste)
+msprmodelo2<-mspr(yhatmodelo2,yobservado)
+yhatmodelo3<-predict(modelo3,newdata=dadosteste)
+msprmodelo3<-mspr(yhatmodelo3,yobservado)
+modelo<-c("Modelo1","Modelo2","Modelo3")
+mspr<-c(msprmodelo1,msprmodelo2,msprmodelo3)
+dadosmspr<-data.frame(Modelo=modelo,MSPR=mspr)
+dadosmspr
+```
+
+Ao se observar o MSPR pode-se observar que o melhor modelo é o segundo modelo ,que apresenta um MSPR de 5906.82 . 
+
+Pode-se verificar então se o modelo possui os pressuposto da regressão linear,que é homogeneidade e normalidade dos residuos . 
+
+Para a normalidade pode-se construir um histograma dos residuos . 
+
+```{r}
+hist(modelo2$residuals,main="Histograma dos residuos do modelo 2",xlab="Residuos",ylab="Frequência")
+```
+
+Do gráfico pode-se suspeitar que o residuos não seguem uma distribuição normal,pois o gráfico não possui formato de sino . Porém,para se confirmar tem-se que realizar um teste ,sendo que o teste escolhido é o Teste de Shapiro ,em que as hipóteses são : 
+
+
+          H0= Os residuos seguem uma distribuição normal
+
+          H1= Os residuos não seguem uma distribuição normal
+
+
+```{r}
+shapiro.test(modelo2$residuals)
+```
+
+A um nível de significância de 5%,pode-se observar que os residuos não seguem uma distribuição normal,logo o modelo fere um dos pressupostos da regressão linear,que é a linearidade . Portanto,pode-se tentar alguma transformação . Uma transformação possível é transformação a nota em Matemática como : 
+
+$$
+                    NotaMT*=1/NotaMT
+$$
+
+Logo,ajustando o modelo com a transformação,tem-se que o modelo ajustado é dado por : 
+
+```{r}
+modelo2.1<-lm(1/NotaMT~Idade+NotaCN+NotaCH+NotaLC+Renda_5.10oumais+EscolaEM_SomentePublica, data = dadostreino)
+summary(modelo2.1)
+
+```
+
+Por fim,pode-se realizar um teste de shapiro nesse modelo transformado ,tem-se então : 
+
+```{r}
+shapiro.test(modelo2.1$residuals)
+```
+
+Pode-se observar que o p_valor do teste é 0.1769, logo a um nível de significância de 5%, não se rejeita a hipótese de que os residuos seguem uma distribuição normal . 
+
+Pode-se então realizar um teste de homogeneidade ,para verificar homocedasticidade , em que as hipóteses são :
+
+
+                H0= A  variância  do  modelo  é  constante 
+                H1 = A  variância  do modelo  não  é constante
+
+
+
+Realizando o teste de Breusch-Pagan test tem-se : 
+```{r}
+lmtest::bptest(modelo2.1)
+```
+
+Pode-se observar que o p_valor do teste de homogeneidade é de 0.2887 , logo a um nível de significância de 5% ,não se rejeita a hipótese de que o modelo apresenta variância constante ,logo o modelo apresenta homocedasticidade . 
+
+É possível então construir um gráfico para verificar como os residuos estão de acordo com a nota predita pelo modelo . 
+
+```{r}
+yhatmodelo2.1<-predict(modelo2.1,data=dadostreino)
+plot(yhatmodelo2.1,modelo2.1$residuals,main="Gráfico de Residuos vs NotaMT*
+predita",xlab="Nota MT predita*",ylab = "Residuos")
+```
+
+O gráfico de homogeneidade diz que a variância está constante,pois os resíduos se encontram
+ao redor de 0, e a variabilidade é constante,pois não se tem uma grande variação de acordo com o valor de NotaMT* predita. Logo,pode-se concluir que a transformação na variável NotaMT deu certo ,e o modelo ajustado está correto . 
+
+**Conclusão**
+
+Portanto ,do summary do modelo pode-se retirar algumas conclusões :
+
+1) Os coeficientes do modelo são :
+```{r}
+as.data.frame(modelo2.1$coefficients)
+```
+
+2) O modelo consegue explicar 32.6% da variabilidade dos dados
+
+3) As variáveis importantes no modelo são a idade, NotaCN(Ciências da Natureza) ,
+NotaCH(Ciências humanas),NotaLC(Linguagens e Códigos) , Renda_5.10oumais , EscolaEM_SomentePublica. Enquanto que variáveis como a NotaRED(Nota
+Redação), Sexo,EstadoCivil,CorAsvariáveis foram descartadas .
+
+4) As variáveis NotaCN,NotaCH,NotaLC,Renda_5.10oumais tem uma relação negativa
+com NotaMT* ,o que pode indicar que quanto maior o valor dessas variáveis maior
+será a nota em Matemática,pois quanto menor o valor de NotaMT* maior NotaMT
+(nota em Matemática),pois NotaMT* e NotaMT são inversamente proporcionais. Enquanto que as variáveis Idade e EscolaEM_SomentePublica tem uma relação positiva,o que indica que quanto maior a idade e quando é somente escola pública
+tende-se a ter um pior desempenho em Matemática .
+
+5) Outro fator que pode ser relevante para a análise é em relação a condição social do estudante,pois o modelo mostra que pessoas de escola pública(normalmente com menor poder aquisitivo) tendem a tirar uma nota pior em Matemática,enquanto que quem possui Renda_5.10oumais tende a ir melhor .
+
